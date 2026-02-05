@@ -13,3 +13,8 @@ HiFiGAN Vocoder
 Riva (real-time serving)
         ↓
 Mobile / Web / Wearable App
+
+
+BACKEND API DEPLOYMENT:
+pip install fastapi uvicorn nemo_toolkit[tts] soundfile torch
+
