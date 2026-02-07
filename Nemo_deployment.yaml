@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nemo-service
+  namespace: motivational-app
+  labels:
+    app: nemo-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nemo-service
+  template:
+    metadata:
+      labels:
+        app: nemo-service
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-a100
+      containers:
+      - name: nemo-llm
+        image: nvcr.io/nvidia/nemo:23.10
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          python -m nemo.collections.nlp.models.language_modeling.megatron_gpt_service \
+            --config-path=/config \
+            --config-name=inference_config.yaml
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        resources:
+          requests:
+            nvidia.com/gpu: 2
+            memory: "64Gi"
+            cpu: "8"
+          limits:
+            nvidia.com/gpu: 2
+            memory: "128Gi"
+            cpu: "16"
+        volumeMounts:
+        - name: nemo-models
+          mountPath: /models
+        - name: nemo-config
+          mountPath: /config
+      volumes:
+      - name: nemo-models
+        persistentVolumeClaim:
+          claimName: nemo-models-pvc
+      - name: nemo-config
+        configMap:
+          name: nemo-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nemo-service
+  namespace: motivational-app
+spec:
+  selector:
+    app: nemo-service
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nemo-models-pvc
+  namespace: motivational-app
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: standard-rwo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nemo-config
+  namespace: motivational-app
+data:
+  inference_config.yaml: |
+    server: true
+    tensor_model_parallel_size: 2
+    pipeline_model_parallel_size: 1
+    port: 8080
+    web_server: true
+    model_file: /models/llama-2-13b.nemo
