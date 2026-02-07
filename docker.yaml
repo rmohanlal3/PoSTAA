@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: motivational-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: motivational_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - motivational-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: motivational-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - motivational-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: motivational-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/motivational_db
+      - REDIS_HOST=redis
+      - ENVIRONMENT=development
+      - DEBUG=true
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    networks:
+      - motivational-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # NeMo Service (Mock for local dev - requires GPU)
+  # Uncomment if you have GPU support
+  # nemo-service:
+  #   image: nvcr.io/nvidia/nemo:23.10
+  #   container_name: motivational-nemo
+  #   runtime: nvidia
+  #   environment:
+  #     - CUDA_VISIBLE_DEVICES=0
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - motivational-network
+
+  # Riva Service (Mock for local dev - requires GPU)
+  # Uncomment if you have GPU support
+  # riva-service:
+  #   image: nvcr.io/nvidia/riva/riva-speech:2.14.0
+  #   container_name: motivational-riva
+  #   runtime: nvidia
+  #   environment:
+  #     - CUDA_VISIBLE_DEVICES=0
+  #     - service_enabled_tts=true
+  #   ports:
+  #     - "50051:50051"
+  #   networks:
+  #     - motivational-network
+
+volumes:
+  postgres_data:
+
+networks:
+  motivational-network:
+    driver: bridge
