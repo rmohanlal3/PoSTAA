@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: riva-service
+  namespace: motivational-app
+  labels:
+    app: riva-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: riva-service
+  template:
+    metadata:
+      labels:
+        app: riva-service
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-a100
+      containers:
+      - name: riva-speech
+        image: nvcr.io/nvidia/riva/riva-speech:2.14.0
+        ports:
+        - containerPort: 50051
+          name: grpc
+        env:
+        - name: service_enabled_asr
+          value: "false"
+        - name: service_enabled_nlp
+          value: "false"
+        - name: service_enabled_tts
+          value: "true"
+        - name: language_code
+          value: "en-US"
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+            memory: "16Gi"
+            cpu: "4"
+          limits:
+            nvidia.com/gpu: 1
+            memory: "32Gi"
+            cpu: "8"
+        volumeMounts:
+        - name: riva-models
+          mountPath: /data
+      volumes:
+      - name: riva-models
+        persistentVolumeClaim:
+          claimName: riva-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: riva-service
+  namespace: motivational-app
+spec:
+  selector:
+    app: riva-service
+  ports:
+  - protocol: TCP
+    port: 50051
+    targetPort: 50051
+    name: grpc
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: riva-models-pvc
+  namespace: motivational-app
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: standard-rwo
